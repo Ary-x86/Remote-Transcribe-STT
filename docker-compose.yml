@@ -1,0 +1,15 @@
+services:
+  remote-transcribe:
+    build: .
+    image: remote-transcribe
+    container_name: remote-transcribe
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+    ports:
+      # Bound to localhost so the app is only reachable through your reverse
+      # proxy. Change to "8080:8080" to expose it directly.
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./data:/data

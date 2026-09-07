@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Remote Transcribe</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙️</text></svg>">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<!-- Login gate -------------------------------------------------------------->
+<div id="login" class="overlay" hidden>
+  <form class="login-card" id="login-form">
+    <div class="login-mark">🎙️</div>
+    <h1>Remote Transcribe</h1>
+    <p class="muted">This instance is password protected.</p>
+    <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required>
+    <p class="error" id="login-error" hidden></p>
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+</div>
+
+<!-- App --------------------------------------------------------------------->
+<div id="app" hidden>
+
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">🎙️</span> Remote Transcribe</div>
+    <div class="topbar-actions">
+      <button id="btn-history" class="ghost" title="Past transcriptions">History</button>
+      <button id="btn-help" class="ghost icon" title="Help and model guide" aria-label="Help">?</button>
+      <button id="btn-logout" class="ghost icon" title="Sign out" aria-label="Sign out" hidden>⏻</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <div id="banner" class="banner" hidden></div>
+
+    <!-- Source ------------------------------------------------------------->
+    <section class="card">
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-source="record" role="tab">Record</button>
+        <button class="tab" data-source="upload" role="tab">Upload</button>
+      </div>
+
+      <div class="pane" id="pane-record">
+        <div id="mic-warning" class="notice warn" hidden>
+          Your browser only allows microphone access over HTTPS or on
+          <code>localhost</code>. On a remote server, put the app behind TLS —
+          the README has a Caddy snippet — or upload a file instead.
+        </div>
+        <div class="recorder">
+          <button id="btn-record" class="record-btn" aria-label="Start recording">
+            <span class="record-dot"></span>
+          </button>
+          <div class="recorder-meta">
+            <div class="timer" id="timer">00:00</div>
+            <div class="meter" id="meter" aria-hidden="true"><span></span></div>
+            <div class="muted small" id="record-hint">Click to start recording</div>
+          </div>
+          <button id="btn-record-cancel" class="ghost small-btn" hidden>Discard</button>
+        </div>
+      </div>
+
+      <div class="pane" id="pane-upload" hidden>
+        <div class="dropzone" id="dropzone" tabindex="0" role="button">
+          <div class="dropzone-icon">⤓</div>
+          <div><strong>Drop an audio or video file</strong> or click to browse</div>
+          <div class="muted small">flac, mp3, mp4, m4a, ogg, wav, webm, mpeg — long files are split automatically</div>
+          <input type="file" id="file-input" accept="audio/*,video/*,.flac,.mp3,.mp4,.m4a,.ogg,.wav,.webm,.mpga,.mpeg" hidden>
+        </div>
+      </div>
+
+      <div id="selected" class="selected" hidden>
+        <span class="selected-icon">🎵</span>
+        <div class="selected-body">
+          <div class="selected-name" id="selected-name"></div>
+          <div class="muted small" id="selected-meta"></div>
+        </div>
+        <audio id="selected-audio" controls></audio>
+        <button id="btn-clear" class="ghost icon" aria-label="Remove">✕</button>
+      </div>
+    </section>
+
+    <!-- Options ------------------------------------------------------------>
+    <details class="card options" id="options">
+      <summary>
+        <span>Options</span>
+        <span class="muted small" id="options-summary"></span>
+      </summary>
+
+      <div class="grid">
+        <label class="field">
+          <span>Model</span>
+          <select id="opt-model"></select>
+          <span class="hint" id="model-hint"></span>
+        </label>
+
+        <label class="field">
+          <span>Task</span>
+          <select id="opt-task">
+            <option value="transcribe">Transcribe (keep the language)</option>
+            <option value="translate">Translate to English</option>
+          </select>
+          <span class="hint">Translate always outputs English, whatever went in.</span>
+        </label>
+
+        <label class="field">
+          <span>Language</span>
+          <select id="opt-language"></select>
+          <span class="hint">Naming it is faster and more accurate. Leave on Auto if speakers switch languages.</span>
+        </label>
+
+        <label class="field">
+          <span>Speakers</span>
+          <select id="opt-diarization">
+            <option value="off">Off</option>
+            <option value="llm">Estimate with an LLM</option>
+            <option value="acoustic">Acoustic (ElevenLabs)</option>
+          </select>
+          <span class="hint" id="diarization-hint"></span>
+        </label>
+
+        <label class="field" id="field-speakers" hidden>
+          <span>Expected speakers</span>
+          <input type="number" id="opt-num-speakers" min="1" max="32" placeholder="Auto">
+          <span class="hint">Optional hint. Leave blank to let it decide.</span>
+        </label>
+
+        <label class="field">
+          <span>Cleanup</span>
+          <select id="opt-cleanup"></select>
+          <span class="hint" id="cleanup-hint"></span>
+        </label>
+
+        <label class="field wide">
+          <span>Vocabulary hints <em class="muted" id="prompt-count"></em></span>
+          <textarea id="opt-prompt" rows="2" placeholder="Names, jargon, and spellings that Whisper tends to get wrong — e.g. Aryan, Groq, Kubernetes, PostgreSQL"></textarea>
+          <span class="hint">Nudges spelling and style. Write it in the same language as the audio.</span>
+        </label>
+
+        <label class="field">
+          <span>Temperature <em class="muted" id="temp-value">0.0</em></span>
+          <input type="range" id="opt-temperature" min="0" max="1" step="0.1" value="0">
+          <span class="hint">0 is the most literal. Raise it only if output gets stuck repeating.</span>
+        </label>
+
+        <label class="field checkbox">
+          <input type="checkbox" id="opt-autocopy" checked>
+          <span>Copy the result to my clipboard automatically</span>
+        </label>
+      </div>
+    </details>
+
+    <div class="actions">
+      <button id="btn-submit" class="primary big" disabled>Transcribe</button>
+      <span class="muted small" id="cost-hint"></span>
+    </div>
+
+    <!-- Progress ----------------------------------------------------------->
+    <section class="card progress-card" id="progress" hidden>
+      <div class="progress-head">
+        <span class="spinner"></span>
+        <span id="progress-label">Working…</span>
+        <span class="muted small" id="progress-detail"></span>
+      </div>
+      <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+    </section>
+
+    <!-- Result ------------------------------------------------------------->
+    <section class="card result" id="result" hidden>
+      <div class="result-head">
+        <div class="tabs small" role="tablist">
+          <button class="tab active" data-view="text" role="tab">Text</button>
+          <button class="tab" data-view="speakers" role="tab" hidden>Speakers</button>
+          <button class="tab" data-view="timestamps" role="tab">Timestamps</button>
+        </div>
+        <div class="result-actions">
+          <select id="result-cleanup" class="inline-select" title="Re-run cleanup"></select>
+          <button id="btn-copy" class="primary small-btn">Copy</button>
+          <div class="dropdown">
+            <button class="ghost small-btn" id="btn-export">Export ▾</button>
+            <div class="dropdown-menu" id="export-menu" hidden>
+              <a data-fmt="txt">Plain text (.txt)</a>
+              <a data-fmt="srt">Subtitles (.srt)</a>
+              <a data-fmt="vtt">WebVTT (.vtt)</a>
+              <a data-fmt="json">Raw data (.json)</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="result-meta muted small" id="result-meta"></div>
+      <div id="result-warnings"></div>
+
+      <div class="view" id="view-text"><div class="transcript" id="transcript"></div></div>
+      <div class="view" id="view-speakers" hidden>
+        <div class="notice" id="speaker-notice"></div>
+        <div class="turns" id="turns"></div>
+      </div>
+      <div class="view" id="view-timestamps" hidden><div class="segments" id="segments"></div></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- History drawer ---------------------------------------------------------->
+<aside class="drawer" id="drawer" hidden>
+  <div class="drawer-head">
+    <strong>History</strong>
+    <button class="ghost icon" id="btn-drawer-close" aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body" id="history-list"></div>
+</aside>
+<div class="scrim" id="scrim" hidden></div>
+
+<!-- Help modal -------------------------------------------------------------->
+<div class="overlay" id="help" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <div class="tabs small">
+        <button class="tab active" data-help="usage">How to use</button>
+        <button class="tab" data-help="models">Which model?</button>
+        <button class="tab" data-help="limits">Costs &amp; limits</button>
+      </div>
+      <button class="ghost icon" id="btn-help-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="help-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="/languages.js"></script>
+<script src="/help.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+# Reverse proxy with an automatic Let's Encrypt certificate.
+#
+#   1. Point an A record at this server.
+#   2. Replace transcribe.example.com below with that hostname.
+#   3. caddy run --config Caddyfile
+#
+# TLS is not optional here: browsers refuse microphone access on plain HTTP,
+# so without it the record button will not work on a remote host.
+
+transcribe.example.com {
+	reverse_proxy 127.0.0.1:8080
+
+	# Long recordings mean long uploads and long requests.
+	request_body {
+		max_size 200MB
+	}
+	encode gzip
+}
