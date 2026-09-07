@@ -157,11 +157,27 @@ class Store:
         return record
 
     def update_cleanup(self, record_id: str, clean_text: str, preset: str) -> None:
+        """Store a cleanup result, or clear it when reverting to raw.
+
+        The title tracks whichever text is actually displayed, so reverting
+        has to retitle from the raw transcript instead of from empty cleanup.
+        """
+        cleaned = clean_text.strip()
         with _connect(self.db_path) as connection:
+            if not cleaned:
+                row = connection.execute(
+                    "SELECT raw_text FROM transcripts WHERE id = ?", (record_id,)
+                ).fetchone()
+                if row is None:
+                    return
+                cleaned_value, title = None, title_from(row["raw_text"])
+            else:
+                cleaned_value, title = cleaned, title_from(cleaned)
+
             connection.execute(
                 "UPDATE transcripts SET clean_text = ?, cleanup_preset = ?, title = ? "
                 "WHERE id = ?",
-                (clean_text, preset, title_from(clean_text), record_id),
+                (cleaned_value, preset, title, record_id),
             )
 
     def rename_speakers(self, record_id: str, mapping: dict[str, str]) -> bool:

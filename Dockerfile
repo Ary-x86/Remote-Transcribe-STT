@@ -18,12 +18,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 COPY static/ ./static/
+COPY docker-entrypoint.sh /usr/local/bin/
 
-# Run unprivileged; /data is a volume so it has to be writable by this user.
+# The entrypoint starts as root only long enough to make /data writable, then
+# drops to this account. Staying root the whole way would be simpler and worse.
 RUN useradd --system --create-home --uid 10001 transcribe \
  && mkdir -p /data/audio \
- && chown -R transcribe:transcribe /data /srv
-USER transcribe
+ && chown -R transcribe:transcribe /data /srv \
+ && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 VOLUME ["/data"]
 EXPOSE 8080
@@ -31,4 +33,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -fsS http://127.0.0.1:8080/healthz || exit 1
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
