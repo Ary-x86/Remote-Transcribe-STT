@@ -122,6 +122,33 @@ who spoke. So there are two options, and they are not equivalent:
 
 Either way, click a speaker label in the Speakers tab to rename them.
 
+## Cleanup
+
+After a transcript comes back, you can pick one of four presets. The raw
+transcript is always kept, so you can re-run cleanup with a different preset
+later without re-transcribing.
+
+- **Raw** — Exactly what Whisper heard. No second LLM pass, no extra cost.
+  Every filler word, false start, and mis-punctuation is left in.
+- **Clean up** — Drops filler words (um, uh, like), stutters, and false starts,
+  and fixes punctuation, capitalisation, and paragraph breaks. Your wording
+  and meaning are preserved; nothing is summarised, reordered, or rephrased.
+  Use this when you want a readable version of what you actually said.
+- **Format as prompt** — Turns rambling dictation into a structured written
+  prompt for an AI assistant. Organises the request logically, adds headings
+  or bullets where they help, and makes implied structure explicit. Every
+  requirement, constraint, question, and aside is preserved — nothing is
+  invented and the prompt is never answered. Use this when you dictated a
+  request to hand to another LLM.
+- **Summary notes** — Condenses the transcript into a short context paragraph
+  followed by bulleted key points, with separate headings for any decisions,
+  action items, or open questions. Use this for meetings or interviews where
+  you want the takeaways rather than the full text.
+
+Clean up and Format as prompt preserve everything that was said; Summary
+notes deliberately does not. Each cleanup pass costs a fraction of a cent on
+top of the transcription itself.
+
 ## Known limits
 
 - **Mixed languages in one recording.** Whisper transcribes one language at a
