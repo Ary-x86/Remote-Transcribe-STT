@@ -46,11 +46,11 @@ Open <http://localhost:8080>.
 
 ### On Windows
 
-Everything above works in PowerShell, but if you would rather double-click a
-Desktop shortcut than open a terminal, see [`windows/README.md`](windows/README.md).
-It covers a one-shot script that installs Desktop / Start Menu shortcuts
-against your local checkout, and an Inno Setup script for building a
-releasable `.exe` installer.
+Everything above works in PowerShell too. If you would rather have a normal
+Windows installer — one `.exe` that prompts for your Groq key, bundles its
+own Python and ffmpeg, and puts a Desktop shortcut in front of the app —
+see [`windows/README.md`](windows/README.md) for how to build it. Prebuilt
+installers live on the project's GitHub Releases page.
 
 ### With Docker
 

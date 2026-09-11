@@ -1,70 +1,36 @@
 #Requires -Version 5.1
 # Remote Transcribe launcher.
 #
-# Starts uvicorn on port 8080 (creating the venv on first run and reinstalling
-# dependencies if requirements.txt has changed), waits for the port to answer,
-# then opens the app in the default browser.
-#
-# Meant to be called from launcher.vbs so the console window stays hidden.
+# The installer places bundled Python and ffmpeg alongside the app, so the
+# launcher just points at those, starts uvicorn hidden, waits for the port,
+# and opens the browser. No venv, no pip, no PATH pollution.
 
 $ErrorActionPreference = "Stop"
 
-# windows/ sits one level below the repo root.
-$repo = Split-Path -Parent $PSScriptRoot
-Set-Location $repo
+# windows/ sits one level below the install root.
+$app = Split-Path -Parent $PSScriptRoot
+Set-Location $app
 
-$python = Join-Path $repo ".venv\Scripts\python.exe"
-$uvicorn = Join-Path $repo ".venv\Scripts\uvicorn.exe"
-$reqsHash = Join-Path $repo ".venv\.reqs-hash"
-$startupLog = Join-Path $repo "windows\last-startup.log"
+$python = Join-Path $app "python\python.exe"
+$ffmpeg = Join-Path $app "ffmpeg\bin"
+$logDir = Join-Path $app "windows"
+$startupLog = Join-Path $logDir "last-startup.log"
+$serverLog = Join-Path $logDir "uvicorn.log"
+$serverErr = Join-Path $logDir "uvicorn.err.log"
+$port = 8080
 
 function Write-Log([string]$message) {
     $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Add-Content -Path $startupLog -Value "[$stamp] $message" -Encoding utf8
 }
 
-# Fresh log for each launch.
-Set-Content -Path $startupLog -Value "" -Encoding utf8
-Write-Log "Launcher started in $repo"
-
-# First-run bootstrap: create the venv and install requirements.
-if (-not (Test-Path $python)) {
-    Write-Log "No venv found, creating one."
-    try {
-        python -m venv .venv
-    } catch {
-        [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
-        [System.Windows.Forms.MessageBox]::Show(
-            "Python 3.11+ was not found on PATH. Install it from python.org (tick 'Add Python to PATH') and try again.",
-            "Remote Transcribe") | Out-Null
-        exit 1
-    }
-    & $python -m pip install --upgrade pip | Out-Null
-    & $python -m pip install -r requirements.txt | Out-Null
-    (Get-FileHash requirements.txt).Hash | Set-Content $reqsHash
-    Write-Log "Venv created and dependencies installed."
-} else {
-    # If requirements.txt has changed since last launch, sync it.
-    $current = (Get-FileHash requirements.txt).Hash
-    $stored = if (Test-Path $reqsHash) { Get-Content $reqsHash } else { "" }
-    if ($current -ne $stored) {
-        Write-Log "requirements.txt changed, reinstalling dependencies."
-        & $python -m pip install -r requirements.txt | Out-Null
-        $current | Set-Content $reqsHash
-    }
+function Show-Error([string]$message) {
+    [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
+    [System.Windows.Forms.MessageBox]::Show($message, "Remote Transcribe",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
 }
 
-# Make sure there is an .env; open it in Notepad the first time so the user
-# can drop their key in before anything tries to reach Groq.
-if (-not (Test-Path ".env")) {
-    if (Test-Path ".env.example") {
-        Copy-Item ".env.example" ".env"
-        Write-Log "Created .env from .env.example, opening Notepad."
-        Start-Process notepad.exe ".env" -Wait
-    }
-}
-
-# If port 8080 already answers, assume the app is up and just open the browser.
 function Test-Port([int]$port) {
     try {
         $tcp = New-Object System.Net.Sockets.TcpClient
@@ -76,37 +42,64 @@ function Test-Port([int]$port) {
     }
 }
 
-if (Test-Port 8080) {
-    Write-Log "Port 8080 already answers; skipping server start."
-    Start-Process "http://localhost:8080"
+Set-Content -Path $startupLog -Value "" -Encoding utf8
+Write-Log "Launcher started in $app"
+
+if (-not (Test-Path $python)) {
+    Show-Error "The bundled Python runtime is missing.`n`nRun the installer again and choose Repair."
+    exit 1
+}
+
+# Put bundled ffmpeg on PATH for this launch only.
+if (Test-Path $ffmpeg) {
+    $env:PATH = "$ffmpeg;$env:PATH"
+}
+
+# If the server already answers, just open the browser.
+if (Test-Port $port) {
+    Write-Log "Server already running on port $port; opening browser."
+    Start-Process "http://localhost:$port"
     exit 0
 }
 
-# Start uvicorn detached and hidden; write its output next to the log.
-$serverLog = Join-Path $repo "windows\uvicorn.log"
-Write-Log "Starting uvicorn."
-Start-Process -FilePath $uvicorn `
-    -ArgumentList "app.main:app","--host","127.0.0.1","--port","8080" `
-    -WorkingDirectory $repo `
-    -WindowStyle Hidden `
-    -RedirectStandardOutput $serverLog `
-    -RedirectStandardError (Join-Path $repo "windows\uvicorn.err.log") | Out-Null
+# Warn if .env is missing or the Groq key looks empty.
+$envPath = Join-Path $app ".env"
+if (-not (Test-Path $envPath)) {
+    Show-Error "Configuration file .env is missing.`n`nRun the installer again to set your API keys."
+    exit 1
+}
+$envContents = Get-Content $envPath -Raw
+if ($envContents -notmatch "(?m)^\s*GROQ_API_KEY\s*=\s*\S") {
+    Show-Error "No Groq API key is set.`n`nRun the installer again and enter your key on the Configuration page."
+    exit 1
+}
+
+Write-Log "Starting uvicorn on port $port."
+try {
+    Start-Process -FilePath $python `
+        -ArgumentList "-m","uvicorn","app.main:app","--host","127.0.0.1","--port","$port" `
+        -WorkingDirectory $app `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $serverLog `
+        -RedirectStandardError $serverErr | Out-Null
+} catch {
+    Write-Log "Failed to start uvicorn: $($_.Exception.Message)"
+    Show-Error "Could not start the server. See:`n$startupLog"
+    exit 1
+}
 
 # Poll for the port for up to 30 seconds.
 $deadline = (Get-Date).AddSeconds(30)
 $ready = $false
 while ((Get-Date) -lt $deadline) {
-    if (Test-Port 8080) { $ready = $true; break }
+    if (Test-Port $port) { $ready = $true; break }
     Start-Sleep -Milliseconds 300
 }
 
 if ($ready) {
     Write-Log "Server ready, opening browser."
-    Start-Process "http://localhost:8080"
+    Start-Process "http://localhost:$port"
 } else {
     Write-Log "Server did not answer within 30s."
-    [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
-    [System.Windows.Forms.MessageBox]::Show(
-        "Remote Transcribe did not start within 30 seconds.`n`nSee windows\uvicorn.err.log for details.",
-        "Remote Transcribe") | Out-Null
+    Show-Error "Remote Transcribe did not start within 30 seconds.`n`nSee $serverErr for details."
 }
