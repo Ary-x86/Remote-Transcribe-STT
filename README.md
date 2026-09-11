@@ -44,6 +44,14 @@ python3 -m venv .venv
 
 Open <http://localhost:8080>.
 
+### On Windows
+
+Everything above works in PowerShell, but if you would rather double-click a
+Desktop shortcut than open a terminal, see [`windows/README.md`](windows/README.md).
+It covers a one-shot script that installs Desktop / Start Menu shortcuts
+against your local checkout, and an Inno Setup script for building a
+releasable `.exe` installer.
+
 ### With Docker
 
 ```bash
