@@ -52,6 +52,13 @@ own Python and ffmpeg, and puts a Desktop shortcut in front of the app —
 see [`windows/README.md`](windows/README.md) for how to build it. Prebuilt
 installers live on the project's GitHub Releases page.
 
+### On Linux
+
+Run `linux/install.sh` once to get a **FastTrans** entry in your app menu
+and on your Desktop. Clicking it opens a terminal, activates the venv,
+starts the server, and opens the browser. See
+[`linux/README.md`](linux/README.md).
+
 ### With Docker
 
 ```bash
